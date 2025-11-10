@@ -121,7 +121,7 @@ namespace Application.Services
 			if (request is null)
 				return new BaseResponse<PagedResult<GetSummaryResponse>>("Request is null", StatusCodes.BadRequest, null);
 
-			if (ownerId <=0)
+			if (ownerId <= 0)
 			{
 				return new BaseResponse<PagedResult<GetSummaryResponse>>("Invalid owner id", StatusCodes.BadRequest, null);
 			}
@@ -233,13 +233,6 @@ namespace Application.Services
 			{
 				Expression<Func<NewsArticle, bool>> toFilter = n => n.CreatedDate <= request.CreatedDateTo.Value;
 				filter = filter is null ? toFilter : ExpressionExtensions.AndAlso(filter, toFilter);
-			}
-
-			if (request.TagId.HasValue)
-			{
-				var tagId = request.TagId.Value;
-				Expression<Func<NewsArticle, bool>> tagFilter = n => n.Tags.Any(t => t.TagId == tagId);
-				filter = filter is null ? tagFilter : ExpressionExtensions.AndAlso(filter, tagFilter);
 			}
 
 			if (request.TagIds != null)

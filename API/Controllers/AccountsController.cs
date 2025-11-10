@@ -69,6 +69,14 @@ namespace API.Controllers
 			return StatusCode((int)result.StatusCode, result);
 		}
 
+		[HttpGet("lookup")]
+		public async Task<ActionResult<BaseResponse<List<GetLookupResponse>>>> GetForLookup([FromQuery] GetLookupRequest request)
+		{
+			var result = await _accountService.GetLookupAsync(request);
+			return StatusCode((int)result.StatusCode, result);
+		}
+
+
 		[HttpGet("{id}")]
 		public async Task<ActionResult<BaseResponse<GetResponse>>> GetById(int id)
 		{

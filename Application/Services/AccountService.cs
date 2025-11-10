@@ -265,5 +265,58 @@ namespace Application.Services
 
 			return new BaseResponse<string>("Profile updated", StatusCodes.Ok, existing.AccountId.ToString());
 		}
+
+		public async Task<BaseResponse<List<GetLookupResponse>>> GetLookupAsync(GetLookupRequest request)
+		{
+			if (request is null)
+				return new BaseResponse<List<GetLookupResponse>>("Request is null", StatusCodes.BadRequest, null);
+
+			// If no filter provided, return empty list to avoid returning large datasets
+			if (string.IsNullOrWhiteSpace(request.AccountName) && string.IsNullOrWhiteSpace(request.AccountEmail) && !request.AccountRole.HasValue)
+			{
+				return new BaseResponse<List<GetLookupResponse>>("Accounts retrieved", StatusCodes.Ok, new List<GetLookupResponse>());
+			}
+
+			Expression<Func<SystemAccount, bool>>? filter = null;
+
+			if (!string.IsNullOrWhiteSpace(request.AccountName))
+			{
+				var keyword = request.AccountName.Trim();
+				Expression<Func<SystemAccount, bool>> nameFilter = a =>
+					a.AccountName != null && (
+						EF.Functions.Collate(a.AccountName, "Vietnamese_CI_AI").Contains(keyword) ||
+						EF.Functions.Collate(a.AccountName, "Latin1_General_CI_AI").Contains(keyword)
+					);
+				filter = filter is null ? nameFilter : filter.AndAlso(nameFilter);
+			}
+
+			if (!string.IsNullOrWhiteSpace(request.AccountEmail))
+			{
+				var emailKeyword = request.AccountEmail.Trim();
+				Expression<Func<SystemAccount, bool>> emailFilter = a =>
+					a.AccountEmail != null && EF.Functions.Collate(a.AccountEmail, "Latin1_General_CI_AI").Contains(emailKeyword);
+				filter = filter is null ? emailFilter : filter.AndAlso(emailFilter);
+			}
+
+			if (request.AccountRole.HasValue)
+			{
+				var roleValue = (int)request.AccountRole.Value;
+				Expression<Func<SystemAccount, bool>> roleFilter = a => a.AccountRole == roleValue;
+				filter = filter is null ? roleFilter : filter.AndAlso(roleFilter);
+			}
+
+			var items = await _accountRepository.GetAllAsync(
+				filter: filter,
+				orderBy: q => q.OrderBy(a => a.AccountName),
+				asNoTracking: true
+			);
+
+			var mapped = _mapper.Map<IEnumerable<GetLookupResponse>>(items)
+				.OrderBy(a => a.AccountName)
+				.Take(10)
+				.ToList();
+
+			return new BaseResponse<List<GetLookupResponse>>("Accounts retrieved", StatusCodes.Ok, mapped);
+		}
 	}
 }

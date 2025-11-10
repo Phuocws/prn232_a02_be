@@ -218,6 +218,22 @@ namespace Application.Services
 			if (!string.IsNullOrWhiteSpace(request.CategoryName) && await _categoryRepository.AnyAsync(c => c.CategoryName == request.CategoryName && c.CategoryId != id))
 				return new BaseResponse<string>("Another category with the same name exists.", StatusCodes.BadRequest, null);
 
+			// Prevent assigning the category as its own parent
+			if (request.ParentCategoryId.HasValue && request.ParentCategoryId.Value == id)
+			{
+				return new BaseResponse<string>("A category cannot be its own parent.", StatusCodes.BadRequest, null);
+			}
+
+			// If parent specified, ensure it exists
+			if (request.ParentCategoryId.HasValue)
+			{
+				var parentExists = await _categoryRepository.AnyAsync(c => c.CategoryId == request.ParentCategoryId.Value);
+				if (!parentExists)
+				{
+					return new BaseResponse<string>("Parent category not found.", StatusCodes.BadRequest, null);
+				}
+			}
+
 			_mapper.Map(request, existing);
 			_categoryRepository.Update(existing);
 			var saved = await _categoryRepository.SaveChangesAsync();

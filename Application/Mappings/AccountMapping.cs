@@ -15,6 +15,11 @@ namespace Application.Mappings
 				.Map(dest => dest.AccountEmail, src => src.AccountEmail)
 				.Map(dest => dest.AccountRole, src => src.AccountRole);
 
+			config.NewConfig<SystemAccount, GetLookupResponse>()
+				.Map(dest => dest.Id, src => src.AccountId)
+				.Map(dest => dest.AccountName, src => src.AccountName)
+				.Map(dest => dest.AccountEmail, src => src.AccountEmail);
+
 			config.NewConfig<CreateRequest, SystemAccount>()
 				.Map(dest => dest.AccountName, src => src.AccountName)
 				.Map(dest => dest.AccountEmail, src => src.AccountEmail)

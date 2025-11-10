@@ -18,20 +18,20 @@ namespace API.Controllers
 		}
 
 		[HttpGet]
-		public async Task<ActionResult<BaseResponse<PagedResult<GetDetailResponse>>>> Get([FromQuery] GetRequest request)
+		public async Task<ActionResult<BaseResponse<PagedResult<GetSummaryResponse>>>> Get([FromQuery] GetRequest request)
 		{
 			var result = await _newsArticleService.GetWithPagingSortFilterAsync(request);
 			return StatusCode((int)result.StatusCode, result);
 		}
 
 		[HttpGet("my-news")]
-		public async Task<ActionResult<BaseResponse<PagedResult<GetDetailResponse>>>> GetMyNews([FromQuery] GetMineRequest request)
+		public async Task<ActionResult<BaseResponse<PagedResult<GetSummaryResponse>>>> GetMyNews([FromQuery] GetMineRequest request)
 		{
 			var idClaim = User.Claims.FirstOrDefault(c => c.Type == "id" || c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 			if (string.IsNullOrEmpty(idClaim) || !int.TryParse(idClaim, out var ownerId))
 			{
 				return StatusCode((int)Domain.Enums.StatusCodes.Unauthorized,
-					new BaseResponse<GetDetailResponse>("Invalid token or user id missing", Domain.Enums.StatusCodes.Unauthorized, null));
+					new BaseResponse<GetSummaryResponse>("Invalid token or user id missing", Domain.Enums.StatusCodes.Unauthorized, null));
 			}
 			var result = await _newsArticleService.GetMineWithPagingSortFilterAsync(ownerId, request);
 			return StatusCode((int)result.StatusCode, result);

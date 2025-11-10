@@ -7,6 +7,7 @@ namespace Application.Interfaces.Services
 	public interface IAccountService
 	{
 		Task<BaseResponse<PagedResult<GetResponse>>> GetWithPagedSortFilter(GetRequest request);
+		Task<BaseResponse<List<GetLookupResponse>>> GetLookupAsync(GetLookupRequest request);
 		Task<BaseResponse<GetResponse>> GetByIdAsync(int id);
 		Task<BaseResponse<string>> LoginAsync(LoginRequest login);
 		Task<BaseResponse<string>> CreateAsync(CreateRequest request);
