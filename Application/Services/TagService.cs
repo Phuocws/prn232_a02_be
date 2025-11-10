@@ -84,6 +84,30 @@ namespace Application.Services
 			return new BaseResponse<GetResponse>("Tag retrieved", StatusCodes.Ok, dto);
 		}
 
+		public async Task<BaseResponse<List<GetDropdownResponse>>> GetDropdownAsync(GetDropdownRequest request)
+		{
+			if (request is null)
+				return new BaseResponse<List<GetDropdownResponse>>("Request is null", StatusCodes.BadRequest, null);
+
+			// If no filter provided, return empty list as requested
+			if (string.IsNullOrWhiteSpace(request.TagName))
+			{
+				return new BaseResponse<List<GetDropdownResponse>>("Tags retrieved", StatusCodes.Ok, new List<GetDropdownResponse>());
+			}
+
+			var keyword = request.TagName.Trim();
+
+			var items = await _tagRepository.GetAllAsync(
+				filter: t => t.TagName != null && EF.Functions.Collate(t.TagName, "Latin1_General_CI_AI").Contains(keyword),
+				orderBy: q => q.OrderBy(t => t.TagName),
+				asNoTracking: true
+			);
+
+			var mapped = _mapper.Map<IEnumerable<GetDropdownResponse>>(items).Take(5).ToList();
+
+			return new BaseResponse<List<GetDropdownResponse>>("Tags retrieved", StatusCodes.Ok, mapped);
+		}
+
 		public async Task<BaseResponse<PagedResult<GetResponse>>> GetWithPagedSortFilter(GetRequest request)
 		{
 			if (request is null)

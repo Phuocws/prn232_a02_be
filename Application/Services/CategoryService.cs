@@ -77,7 +77,7 @@ namespace Application.Services
 
 		public async Task<BaseResponse<GetResponse>> GetByIdAsync(int id)
 		{
-			var entity = await _categoryRepository.GetByIdAsync(id);
+			var entity = await _categoryRepository.GetByConditionAsync(c => c.CategoryId == id, include: c => c.Include(c => c.ParentCategory));
 			if (entity == null)
 				return new BaseResponse<GetResponse>("Category not found", StatusCodes.NotFound, null);
 
@@ -147,7 +147,7 @@ namespace Application.Services
 
 			var (Items, TotalCount) = await _categoryRepository.GetPagedAsync(
 				filter: filter,
-				include: null,
+				include: c => c.Include(c => c.ParentCategory),
 				orderBy: q => q.ApplySorting(request.SortBy, request.IsDescending),
 				pageNumber: request.PageNumber,
 				pageSize: request.PageSize,

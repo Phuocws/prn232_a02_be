@@ -78,76 +78,71 @@ namespace Application.Services
 			return new BaseResponse<string>("News article deleted", StatusCodes.Ok, null);
 		}
 
-		public async Task<BaseResponse<GetResponse>> GetByIdAsync(int id)
+		public async Task<BaseResponse<GetDetailResponse>> GetByIdAsync(int id)
 		{
 			var entity = await _newsArticleRepository.GetByConditionAsync(
-																			na => na.NewsArticleId == id,
-																			na => na.Include(na => na.Category)
-																					.Include(na => na.Tags)
-																		 );
+										na => na.NewsArticleId == id,
+										na => na.Include(na => na.Category)
+												.Include(na => na.CreatedBy)
+												.Include(na => na.UpdatedBy)
+												.Include(na => na.Tags)
+							 			);
 			if (entity == null)
-				return new BaseResponse<GetResponse>("News article not found", StatusCodes.NotFound, null);
+				return new BaseResponse<GetDetailResponse>("News article not found", StatusCodes.NotFound, null);
 
-			var dto = _mapper.Map<GetResponse>(entity);
-			return new BaseResponse<GetResponse>("News article retrieved", StatusCodes.Ok, dto);
+			var dto = _mapper.Map<GetDetailResponse>(entity);
+			return new BaseResponse<GetDetailResponse>("News article retrieved", StatusCodes.Ok, dto);
 		}
 
-		public async Task<BaseResponse<PagedResult<GetResponse>>> GetWithPagingSortFilterAsync(GetRequest request)
+		public async Task<BaseResponse<PagedResult<GetSummaryResponse>>> GetWithPagingSortFilterAsync(GetRequest request)
 		{
 			if (request is null)
-				return new BaseResponse<PagedResult<GetResponse>>("Request is null", StatusCodes.BadRequest, null);
+				return new BaseResponse<PagedResult<GetSummaryResponse>>("Request is null", StatusCodes.BadRequest, null);
 
 			var filter = BuildFilterFromAdminRequest(request);
 
 			var (items, totalCount) = await _newsArticleRepository.GetPagedAsync(
 				filter: filter,
-				include: q => q.Include(n => n.Category).Include(n => n.Tags),
+				include: q => q.Include(n => n.Category).Include(n => n.CreatedBy),
 				orderBy: q => q.ApplySorting(request.SortBy, request.IsDescending),
 				pageNumber: request.PageNumber,
 				pageSize: request.PageSize,
 				asNoTracking: true
 			);
 
-			var mapped = _mapper.Map<IEnumerable<GetResponse>>(items);
-			var paged = new PagedResult<GetResponse>(mapped, request.PageNumber, request.PageSize, totalCount);
+			var mapped = _mapper.Map<IEnumerable<GetSummaryResponse>>(items);
+			var paged = new PagedResult<GetSummaryResponse>(mapped, request.PageNumber, request.PageSize, totalCount);
 
-			return new BaseResponse<PagedResult<GetResponse>>("News articles retrieved", StatusCodes.Ok, paged);
+			return new BaseResponse<PagedResult<GetSummaryResponse>>("News articles retrieved", StatusCodes.Ok, paged);
 		}
 
-		public async Task<BaseResponse<PagedResult<GetResponse>>> GetMineWithPagingSortFilterAsync(int ownerId, GetMineRequest request)
+		public async Task<BaseResponse<PagedResult<GetSummaryResponse>>> GetMineWithPagingSortFilterAsync(int ownerId, GetMineRequest request)
 		{
 			if (request is null)
-				return new BaseResponse<PagedResult<GetResponse>>("Request is null", StatusCodes.BadRequest, null);
+				return new BaseResponse<PagedResult<GetSummaryResponse>>("Request is null", StatusCodes.BadRequest, null);
 
-			Expression<Func<NewsArticle, bool>>? filter = null;
-
-			if (ownerId <= 0)
+			if (ownerId <=0)
 			{
-				return new BaseResponse<PagedResult<GetResponse>>("Invalid owner id", StatusCodes.BadRequest, null);
+				return new BaseResponse<PagedResult<GetSummaryResponse>>("Invalid owner id", StatusCodes.BadRequest, null);
 			}
 
 			Expression<Func<NewsArticle, bool>> ownerFilter = n => n.CreatedById == ownerId;
-			filter = ownerFilter;
-
-			var ownerFilters = BuildFilterFromOwnerRequest(request);
-			if (ownerFilters != null)
-			{
-				filter = ExpressionExtensions.AndAlso(filter, ownerFilters);
-			}
+			var additional = BuildFilterFromOwnerRequest(request);
+			Expression<Func<NewsArticle, bool>>? filter = additional is null ? ownerFilter : ExpressionExtensions.AndAlso(ownerFilter, additional);
 
 			var (items, totalCount) = await _newsArticleRepository.GetPagedAsync(
 				filter: filter,
-				include: q => q.Include(n => n.Category).Include(n => n.Tags),
+				include: q => q.Include(n => n.Category).Include(n => n.CreatedBy),
 				orderBy: q => q.ApplySorting(request.SortBy, request.IsDescending),
 				pageNumber: request.PageNumber,
 				pageSize: request.PageSize,
 				asNoTracking: true
 			);
 
-			var mapped = _mapper.Map<IEnumerable<GetResponse>>(items);
-			var paged = new PagedResult<GetResponse>(mapped, request.PageNumber, request.PageSize, totalCount);
+			var mapped = _mapper.Map<IEnumerable<GetSummaryResponse>>(items);
+			var paged = new PagedResult<GetSummaryResponse>(mapped, request.PageNumber, request.PageSize, totalCount);
 
-			return new BaseResponse<PagedResult<GetResponse>>("News articles retrieved", StatusCodes.Ok, paged);
+			return new BaseResponse<PagedResult<GetSummaryResponse>>("News articles retrieved", StatusCodes.Ok, paged);
 		}
 
 		// Shared private helper methods

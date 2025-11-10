@@ -13,7 +13,11 @@ namespace Application.Mappings
 				.Map(dest => dest.CategoryId, src => src.CategoryId)
 				.Map(dest => dest.CategoryName, src => src.CategoryName)
 				.Map(dest => dest.CategoryDescription, src => src.CategoryDescription)
-				.Map(dest => dest.ParentCategoryId, src => src.ParentCategoryId)
+				.Map(dest => dest.Parent, src => src.ParentCategory == null ? null : new ParentDto
+				{
+					ParentCategoryId = src.ParentCategory.CategoryId,
+					ParentCategoryName = src.ParentCategory.CategoryName
+				})
 				.Map(dest => dest.IsActive, src => src.IsActive);
 
 			config.NewConfig<CreateRequest, Category>()

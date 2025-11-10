@@ -26,6 +26,13 @@ namespace API.Controllers
 			return StatusCode((int)result.StatusCode, result);
 		}
 
+		[HttpGet("dropdown")]
+		public async Task<ActionResult<BaseResponse<List<GetDropdownResponse>>>> GetForDropdown([FromQuery] GetDropdownRequest request)
+		{
+			var result = await _tagService.GetDropdownAsync(request);
+			return StatusCode((int)result.StatusCode, result);
+		}
+
 		[HttpGet("{id}")]
 		public async Task<ActionResult<BaseResponse<GetResponse>>> GetById(int id)
 		{
