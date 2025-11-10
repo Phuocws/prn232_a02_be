@@ -90,23 +90,30 @@ namespace Application.Services
 			if (request is null)
 				return new BaseResponse<List<GetDropdownResponse>>("Request is null", StatusCodes.BadRequest, null);
 
-			// Fetch all categories as a flat list via repository
-			var allCategories = (await _categoryRepository.GetAllAsync(asNoTracking: true)).ToList();
-
-			// Apply requested filters
-			var filteredCategories = allCategories.AsEnumerable();
-
+			// Fetch categories from repository with optional active filter to reduce data transfer
+			Expression<Func<Category, bool>>? repoFilter = null;
 			if (!request.IncludeInactive)
 			{
-				filteredCategories = filteredCategories.Where(c => c.IsActive);
+				repoFilter = c => c.IsActive;
 			}
 
+			var allCategories = (await _categoryRepository.GetAllAsync(filter: repoFilter, asNoTracking: true)).ToList();
+
+			// Determine which categories act as parents (have children) within the fetched set
+			var parentIds = allCategories
+				.Where(c => c.ParentCategoryId.HasValue)
+				.Select(c => c.ParentCategoryId!.Value)
+				.ToHashSet();
+
+			// Apply requested parent-only filter (if requested, keep only categories that are parents)
+			IEnumerable<Category> filtered = allCategories;
 			if (request.IncludeParentCategoriesOnly)
 			{
-				filteredCategories = filteredCategories.Where(c => !c.ParentCategoryId.HasValue);
+				filtered = filtered.Where(c => parentIds.Contains(c.CategoryId));
 			}
 
-			var filteredList = filteredCategories.ToList();
+			// Order by name for stable output
+			var filteredList = filtered.OrderBy(c => c.CategoryName).ToList();
 
 			// Build the tree structure from the filtered set
 			var lookup = new Dictionary<int, GetDropdownResponse>();
@@ -127,9 +134,19 @@ namespace Application.Services
 				}
 				else
 				{
+					// Only add as root if it has no parent in the filtered set
 					rootNodes.Add(lookup[item.CategoryId]);
 				}
 			}
+
+			// Ensure children lists are ordered
+			foreach (var node in lookup.Values)
+			{
+				node.Children = node.Children.OrderBy(c => c.Name).ToList();
+			}
+
+			// Order root nodes
+			rootNodes = rootNodes.OrderBy(n => n.Name).ToList();
 
 			return new BaseResponse<List<GetDropdownResponse>>("Categories retrieved.", StatusCodes.Ok, rootNodes);
 		}
