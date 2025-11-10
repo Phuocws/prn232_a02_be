@@ -84,15 +84,15 @@ namespace Application.Services
 			return new BaseResponse<GetResponse>("Tag retrieved", StatusCodes.Ok, dto);
 		}
 
-		public async Task<BaseResponse<List<GetDropdownResponse>>> GetDropdownAsync(GetDropdownRequest request)
+		public async Task<BaseResponse<List<GetLookupResponse>>> GetLookupAsync(GetLookupRequest request)
 		{
 			if (request is null)
-				return new BaseResponse<List<GetDropdownResponse>>("Request is null", StatusCodes.BadRequest, null);
+				return new BaseResponse<List<GetLookupResponse>>("Request is null", StatusCodes.BadRequest, null);
 
 			// If no filter provided, return empty list as requested
 			if (string.IsNullOrWhiteSpace(request.TagName))
 			{
-				return new BaseResponse<List<GetDropdownResponse>>("Tags retrieved", StatusCodes.Ok, new List<GetDropdownResponse>());
+				return new BaseResponse<List<GetLookupResponse>>("Tags retrieved", StatusCodes.Ok, new List<GetLookupResponse>());
 			}
 
 			var keyword = request.TagName.Trim();
@@ -103,9 +103,9 @@ namespace Application.Services
 				asNoTracking: true
 			);
 
-			var mapped = _mapper.Map<IEnumerable<GetDropdownResponse>>(items).Take(5).ToList();
+			var mapped = _mapper.Map<IEnumerable<GetLookupResponse>>(items).Take(5).ToList();
 
-			return new BaseResponse<List<GetDropdownResponse>>("Tags retrieved", StatusCodes.Ok, mapped);
+			return new BaseResponse<List<GetLookupResponse>>("Tags retrieved", StatusCodes.Ok, mapped);
 		}
 
 		public async Task<BaseResponse<PagedResult<GetResponse>>> GetWithPagedSortFilter(GetRequest request)

@@ -26,10 +26,10 @@ namespace API.Controllers
 			return StatusCode((int)result.StatusCode, result);
 		}
 
-		[HttpGet("dropdown")]
-		public async Task<ActionResult<BaseResponse<List<GetDropdownResponse>>>> GetForDropdown([FromQuery] GetDropdownRequest request)
+		[HttpGet("lookup")]
+		public async Task<ActionResult<BaseResponse<List<GetLookupResponse>>>> GetForLookup([FromQuery] GetLookupRequest request)
 		{
-			var result = await _tagService.GetDropdownAsync(request);
+			var result = await _tagService.GetLookupAsync(request);
 			return StatusCode((int)result.StatusCode, result);
 		}
 

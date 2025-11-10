@@ -1,6 +1,6 @@
 ﻿namespace Application.DTOs.Requests.Tags
 {
-	public class GetDropdownRequest
+	public class GetLookupRequest
 	{
 		/// <summary>
 		/// Filter by tag name (partial match)
