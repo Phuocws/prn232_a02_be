@@ -85,27 +85,45 @@ namespace Application.Services
 			return new BaseResponse<GetResponse>("Category retrieved", StatusCodes.Ok, dto);
 		}
 
-		public async Task<BaseResponse<List<GetDropdownResponse>>> GetDropdownAsync()
+		public async Task<BaseResponse<List<GetDropdownResponse>>> GetDropdownAsync(GetDropdownRequest request)
 		{
+			if (request is null)
+				return new BaseResponse<List<GetDropdownResponse>>("Request is null", StatusCodes.BadRequest, null);
+
 			// Fetch all categories as a flat list via repository
 			var allCategories = (await _categoryRepository.GetAllAsync(asNoTracking: true)).ToList();
 
-			// Build the tree structure
+			// Apply requested filters
+			var filteredCategories = allCategories.AsEnumerable();
+
+			if (!request.IncludeInactive)
+			{
+				filteredCategories = filteredCategories.Where(c => c.IsActive);
+			}
+
+			if (request.IncludeParentCategoriesOnly)
+			{
+				filteredCategories = filteredCategories.Where(c => !c.ParentCategoryId.HasValue);
+			}
+
+			var filteredList = filteredCategories.ToList();
+
+			// Build the tree structure from the filtered set
 			var lookup = new Dictionary<int, GetDropdownResponse>();
 			var rootNodes = new List<GetDropdownResponse>();
 
 			// Create node objects
-			foreach (var item in allCategories)
+			foreach (var item in filteredList)
 			{
 				lookup[item.CategoryId] = new GetDropdownResponse { Id = item.CategoryId, Name = item.CategoryName };
 			}
 
-			// Link children to parents
-			foreach (var item in allCategories)
+			// Link children to parents (only link when both parent and child are present in the filtered set)
+			foreach (var item in filteredList)
 			{
-				if (item.ParentCategoryId.HasValue && lookup.TryGetValue(item.ParentCategoryId.Value, out GetDropdownResponse? value))
+				if (item.ParentCategoryId.HasValue && lookup.TryGetValue(item.ParentCategoryId.Value, out GetDropdownResponse? parent))
 				{
-					value.Children.Add(lookup[item.CategoryId]);
+					parent.Children.Add(lookup[item.CategoryId]);
 				}
 				else
 				{

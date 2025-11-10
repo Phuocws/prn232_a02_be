@@ -7,7 +7,7 @@ namespace Application.Interfaces.Services
 	public interface ICategoryService
 	{
 		Task<BaseResponse<PagedResult<GetResponse>>> GetWithPagingSortFilterAsync(GetRequest request);
-		Task<BaseResponse<List<GetDropdownResponse>>> GetDropdownAsync();
+		Task<BaseResponse<List<GetDropdownResponse>>> GetDropdownAsync(GetDropdownRequest request);
 		Task<BaseResponse<GetResponse>> GetByIdAsync(int id);
 		Task<BaseResponse<string>> CreateAsync(CreateRequest request);
 		Task<BaseResponse<string>> UpdateAsync(int id, UpdateRequest request);
