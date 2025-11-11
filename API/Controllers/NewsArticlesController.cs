@@ -78,5 +78,12 @@ namespace API.Controllers
 			var result = await _newsArticleService.DeleteAsync(id);
 			return StatusCode((int)result.StatusCode, result);
 		}
+
+		[HttpGet("report")]
+		public async Task<ActionResult<BaseResponse<List<GetStatisticsReportResponse>>>> GetReport([FromQuery] GetStatisticsReportRequest request)
+		{
+			var result = await _newsArticleService.GetReportAsync(request);
+			return StatusCode((int)result.StatusCode, result);
+		}
 	}
 }

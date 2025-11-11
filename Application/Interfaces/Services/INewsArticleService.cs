@@ -12,5 +12,6 @@ namespace Application.Interfaces.Services
 		Task<BaseResponse<string>> CreateAsync(int ownerId, CreateRequest request);
 		Task<BaseResponse<string>> UpdateAsync(int ownerId, int id, UpdateRequest request);
 		Task<BaseResponse<string>> DeleteAsync(int id);
+		Task<BaseResponse<GetStatisticsReportResponse>> GetReportAsync(GetStatisticsReportRequest request);
 	}
 }

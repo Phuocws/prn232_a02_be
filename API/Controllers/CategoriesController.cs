@@ -34,6 +34,7 @@ namespace API.Controllers
 		}
 
 		[HttpGet("dropdown")]
+		[AllowAnonymous]
 		public async Task<ActionResult<BaseResponse<List<GetDropdownResponse>>>> GetDropdown([FromQuery] GetDropdownRequest request)
 		{
 			var result = await _categoryService.GetDropdownAsync(request);

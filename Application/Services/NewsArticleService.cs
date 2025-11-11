@@ -232,6 +232,124 @@ namespace Application.Services
 			return new BaseResponse<PagedResult<GetSummaryResponse>>("News articles retrieved", StatusCodes.Ok, paged);
 		}
 
+		public async Task<BaseResponse<GetStatisticsReportResponse>> GetReportAsync(GetStatisticsReportRequest request)
+		{
+			if (request == null)
+				return new BaseResponse<GetStatisticsReportResponse>("Request is null", StatusCodes.BadRequest, null);
+
+			if (request.EndDate < request.StartDate)
+				return new BaseResponse<GetStatisticsReportResponse>("EndDate must be greater than or equal StartDate", StatusCodes.BadRequest, null);
+
+			var start = request.StartDate.Date;
+			var end = request.EndDate.Date.AddDays(1).AddTicks(-1);
+
+			// fetch articles in range with category and author
+			var (items, total) = await _newsArticleRepository.GetPagedAsync(
+				filter: n => n.CreatedDate >= start && n.CreatedDate <= end,
+				include: q => q.Include(n => n.Category).Include(n => n.CreatedBy),
+				orderBy: null,
+				pageNumber: 1,
+				pageSize: int.MaxValue,
+				asNoTracking: true
+			);
+
+			var itemList = items.ToList();
+			var totalArticles = itemList.Count;
+
+			// Load all categories to compute effective (ancestor-aware) active state
+			var allCategories = (await _categoryRepository.GetAllAsync(asNoTracking: true)).ToList();
+			var catDict = allCategories.ToDictionary(c => c.CategoryId);
+			var catMemo = new Dictionary<int, bool>();
+
+			bool IsChainActive(int catId)
+			{
+				if (catMemo.TryGetValue(catId, out var cached)) return cached;
+				if (!catDict.TryGetValue(catId, out var cat))
+				{
+					catMemo[catId] = false; return false;
+				}
+				if (!cat.IsActive) { catMemo[catId] = false; return false; }
+				if (!cat.ParentCategoryId.HasValue) { catMemo[catId] = true; return true; }
+				var parentActive = IsChainActive(cat.ParentCategoryId.Value);
+				catMemo[catId] = parentActive;
+				return parentActive;
+			}
+
+			// Count inactive articles in the set (by NewsStatus)
+			var inactiveArticlesCount = itemList.Count(n => n.NewsStatus == (byte)NewsStatuses.Inactive);
+
+			// Total categories in system
+			var totalCategories = allCategories.Count;
+
+			// Count inactive categories across all categories using effective active
+			var inactiveCategoriesCount = allCategories.Count(c => !IsChainActive(c.CategoryId));
+
+			// Daily breakdown grouped by date (descending) including active/inactive split (by article status)
+			var daily = itemList
+				.GroupBy(n => n.CreatedDate.Date)
+				.Select(g => new DailyStatistic
+				{
+					Date = g.Key,
+					TotalArticles = g.Count(),
+					ActiveArticles = g.Count(x => x.NewsStatus != (byte)NewsStatuses.Inactive),
+					InactiveArticles = g.Count(x => x.NewsStatus == (byte)NewsStatuses.Inactive)
+				})
+				.OrderByDescending(d => d.Date)
+				.ToList();
+
+			// Build counts dictionary for articles per category in the period
+			var articleCountsByCategory = itemList
+				.GroupBy(n => n.CategoryId)
+				.ToDictionary(g => g.Key, g => g.Count());
+
+			// Category breakdown (include all categories, even with zero articles)
+			var categoryGroups = allCategories
+				.Select(c =>
+				{
+					var catId = c.CategoryId;
+					var cnt = articleCountsByCategory.TryGetValue(catId, out var v) ? v : 0;
+					var effectiveActive = IsChainActive(catId);
+					return new StatisticBreakdown
+					{
+						ItemId = catId,
+						ItemName = c.CategoryName + (effectiveActive ? string.Empty : " (inactive)"),
+						TotalArticles = cnt,
+						Percentage = totalArticles == 0 ? 0 : Math.Round((double)cnt * 100.0 / totalArticles, 2)
+					};
+				})
+				.OrderByDescending(s => s.TotalArticles)
+				.ThenBy(s => s.ItemName)
+				.ToList();
+
+			// Author breakdown remains the same
+			var authorGroups = itemList
+				.GroupBy(n => new { Id = n.CreatedById, Name = n.CreatedBy?.AccountName ?? string.Empty })
+				.Select(g => new StatisticBreakdown
+				{
+					ItemId = g.Key.Id,
+					ItemName = g.Key.Name,
+					TotalArticles = g.Count(),
+					Percentage = totalArticles == 0 ? 0 : Math.Round((double)g.Count() * 100.0 / totalArticles, 2)
+				})
+				.OrderByDescending(s => s.TotalArticles)
+				.ToList();
+
+			var response = new GetStatisticsReportResponse
+			{
+				StartDate = start,
+				EndDate = end,
+				TotalArticlesCreated = totalArticles,
+				TotalCategories = totalCategories,
+				InactiveCategoriesCount = inactiveCategoriesCount,
+				InactiveArticlesCount = inactiveArticlesCount,
+				DailyBreakdown = daily,
+				CategoryBreakdown = categoryGroups,
+				AuthorBreakdown = authorGroups
+			};
+
+			return new BaseResponse<GetStatisticsReportResponse>("Report generated", StatusCodes.Ok, response);
+		}
+
 		// Shared private helper methods
 		private Expression<Func<NewsArticle, bool>>? BuildFilterFromAdminRequest(GetRequest request)
 		{
@@ -362,7 +480,7 @@ namespace Application.Services
 			{
 				var desiredIds = request.TagIds.Distinct().ToList();
 
-				existing.Tags ??= [];
+				existing.Tags ??= new List<Tag>();
 				var existingIds = existing.Tags.Select(t => t.TagId).ToList();
 
 				// Remove tags that are not desired
@@ -374,7 +492,7 @@ namespace Application.Services
 
 				// Add tags that are desired but missing
 				var toAddIds = desiredIds.Except(existingIds).ToList();
-				if (toAddIds.Count != 0)
+				if (toAddIds.Any())
 				{
 					var tags = (await _tagRepository.GetAllAsync(t => toAddIds.Contains(t.TagId))).ToList();
 					foreach (var tag in tags)
