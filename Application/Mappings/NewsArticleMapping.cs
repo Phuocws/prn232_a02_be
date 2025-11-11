@@ -1,6 +1,7 @@
 ﻿using Application.DTOs.Requests.NewsArticles;
 using Application.DTOs.Responses.NewsArticles;
 using Domain.Entities;
+using Domain.Enums;
 using Mapster;
 
 namespace Application.Mappings
@@ -56,8 +57,7 @@ namespace Application.Mappings
 				.Map(dest => dest.NewsContent, src => src.NewsContent)
 				.Map(dest => dest.NewsSource, src => src.NewsSource)
 				.Map(dest => dest.CategoryId, src => src.CategoryId)
-				.Map(dest => dest.NewsStatus, src => src.NewsStatus)
-				.Map(dest => dest.CreatedById, src => src.CreatedById);
+				.Map(dest => dest.NewsStatus, src => NewsStatuses.Active);
 
 			config.NewConfig<UpdateRequest, NewsArticle>()
 				.IgnoreNullValues(true)
@@ -66,8 +66,7 @@ namespace Application.Mappings
 				.Map(dest => dest.NewsContent, src => src.NewsContent)
 				.Map(dest => dest.NewsSource, src => src.NewsSource)
 				.Map(dest => dest.CategoryId, src => src.CategoryId)
-				.Map(dest => dest.NewsStatus, src => src.NewsStatus)
-				.Map(dest => dest.UpdatedById, src => src.UpdatedById);
+				.Map(dest => dest.NewsStatus, src => src.NewsStatus);
 		}
 	}
 }

@@ -32,7 +32,7 @@ namespace Application.Services
 			_updateRequestValidator = updateRequestValidator;
 		}
 
-		public async Task<BaseResponse<string>> CreateAsync(CreateRequest request)
+		public async Task<BaseResponse<string>> CreateAsync(int ownerId, CreateRequest request)
 		{
 			if (request is null)
 				return new BaseResponse<string>("Request is null", StatusCodes.BadRequest, null);
@@ -45,6 +45,8 @@ namespace Application.Services
 			}
 
 			var entity = _mapper.Map<NewsArticle>(request);
+			// set owner from controller
+			entity.CreatedById = ownerId;
 
 			// Attach tags if provided
 			if (request.TagIds != null && request.TagIds.Any())
@@ -333,7 +335,7 @@ namespace Application.Services
 			return filter;
 		}
 
-		public async Task<BaseResponse<string>> UpdateAsync(int id, UpdateRequest request)
+		public async Task<BaseResponse<string>> UpdateAsync(int ownerId, int id, UpdateRequest request)
 		{
 			if (request is null)
 				return new BaseResponse<string>("Request is null", StatusCodes.BadRequest, null);
@@ -352,13 +354,32 @@ namespace Application.Services
 
 			_mapper.Map(request, existing);
 
-			// Update tags if provided
+			// set UpdatedById
+			existing.UpdatedById = ownerId;
+
+			// Update tags if provided - do diff instead of remove-all to avoid duplicate join inserts
 			if (request.TagIds != null)
 			{
-				var tags = (await _tagRepository.GetAllAsync(t => request.TagIds.Contains(t.TagId))).ToList();
-				existing.Tags.Clear();
-				foreach (var tag in tags)
-					existing.Tags.Add(tag);
+				var desiredIds = request.TagIds.Distinct().ToList();
+
+				existing.Tags ??= [];
+				var existingIds = existing.Tags.Select(t => t.TagId).ToList();
+
+				// Remove tags that are not desired
+				var toRemove = existing.Tags.Where(t => !desiredIds.Contains(t.TagId)).ToList();
+				foreach (var tag in toRemove)
+				{
+					existing.Tags.Remove(tag);
+				}
+
+				// Add tags that are desired but missing
+				var toAddIds = desiredIds.Except(existingIds).ToList();
+				if (toAddIds.Count != 0)
+				{
+					var tags = (await _tagRepository.GetAllAsync(t => toAddIds.Contains(t.TagId))).ToList();
+					foreach (var tag in tags)
+						existing.Tags.Add(tag);
+				}
 			}
 
 			_newsArticleRepository.Update(existing);

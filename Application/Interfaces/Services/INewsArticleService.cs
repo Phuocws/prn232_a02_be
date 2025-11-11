@@ -9,8 +9,8 @@ namespace Application.Interfaces.Services
 		Task<BaseResponse<PagedResult<GetSummaryResponse>>> GetWithPagingSortFilterAsync(GetRequest request);
 		Task<BaseResponse<PagedResult<GetSummaryResponse>>> GetMineWithPagingSortFilterAsync(int ownerId, GetMineRequest request);
 		Task<BaseResponse<GetDetailResponse>> GetByIdAsync(int id);
-		Task<BaseResponse<string>> CreateAsync(CreateRequest request);
-		Task<BaseResponse<string>> UpdateAsync(int id, UpdateRequest request);
+		Task<BaseResponse<string>> CreateAsync(int ownerId, CreateRequest request);
+		Task<BaseResponse<string>> UpdateAsync(int ownerId, int id, UpdateRequest request);
 		Task<BaseResponse<string>> DeleteAsync(int id);
 	}
 }

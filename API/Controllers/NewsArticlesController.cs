@@ -47,14 +47,28 @@ namespace API.Controllers
 		[HttpPost]
 		public async Task<ActionResult<BaseResponse<string>>> Create([FromBody] CreateRequest request)
 		{
-			var result = await _newsArticleService.CreateAsync(request);
+			var idClaim = User.Claims.FirstOrDefault(c => c.Type == "id" || c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+			if (string.IsNullOrEmpty(idClaim) || !int.TryParse(idClaim, out var ownerId))
+			{
+				return StatusCode((int)Domain.Enums.StatusCodes.Unauthorized,
+					new BaseResponse<string>("Invalid token or user id missing", Domain.Enums.StatusCodes.Unauthorized, null));
+			}
+
+			var result = await _newsArticleService.CreateAsync(ownerId, request);
 			return StatusCode((int)result.StatusCode, result);
 		}
 
 		[HttpPut("{id}")]
 		public async Task<ActionResult<BaseResponse<string>>> Update(int id, [FromBody] UpdateRequest request)
 		{
-			var result = await _newsArticleService.UpdateAsync(id, request);
+			var idClaim = User.Claims.FirstOrDefault(c => c.Type == "id" || c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+			if (string.IsNullOrEmpty(idClaim) || !int.TryParse(idClaim, out var ownerId))
+			{
+				return StatusCode((int)Domain.Enums.StatusCodes.Unauthorized,
+					new BaseResponse<string>("Invalid token or user id missing", Domain.Enums.StatusCodes.Unauthorized, null));
+			}
+
+			var result = await _newsArticleService.UpdateAsync(ownerId, id, request);
 			return StatusCode((int)result.StatusCode, result);
 		}
 

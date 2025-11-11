@@ -1,6 +1,4 @@
-﻿using Domain.Enums;
-
-namespace Application.DTOs.Requests.NewsArticles
+﻿namespace Application.DTOs.Requests.NewsArticles
 {
 	public class CreateRequest
 	{
@@ -9,8 +7,6 @@ namespace Application.DTOs.Requests.NewsArticles
 		public string NewsContent { get; set; } = string.Empty;
 		public string? NewsSource { get; set; }
 		public int CategoryId { get; set; }
-		public NewsStatuses NewsStatus { get; set; }
-		public int CreatedById { get; set; }
 		public IEnumerable<int>? TagIds { get; set; }
 	}
 }

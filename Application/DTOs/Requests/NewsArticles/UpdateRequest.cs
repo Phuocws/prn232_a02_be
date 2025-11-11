@@ -10,7 +10,6 @@ namespace Application.DTOs.Requests.NewsArticles
 		public string? NewsSource { get; set; }
 		public int? CategoryId { get; set; }
 		public NewsStatuses? NewsStatus { get; set; }
-		public int? UpdatedById { get; set; }
 		public IEnumerable<int>? TagIds { get; set; }
 	}
 }
