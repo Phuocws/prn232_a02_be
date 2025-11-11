@@ -253,7 +253,8 @@ namespace Application.Services
 			if (request is null)
 				return new BaseResponse<string>("Request is null", StatusCodes.BadRequest, null);
 
-			var existing = await _newsArticleRepository.GetByIdAsync(id);
+			var existing = await _newsArticleRepository.GetByConditionAsync(na => na.NewsArticleId == id, na => na.Include(na => na.Tags));
+
 			if (existing == null)
 				return new BaseResponse<string>("News article not found", StatusCodes.NotFound, null);
 
