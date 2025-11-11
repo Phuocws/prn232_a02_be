@@ -55,21 +55,29 @@ namespace Application.Services
 
 		public async Task<BaseResponse<string>> DeleteAsync(int id)
 		{
-			var existing = await _categoryRepository.FirstOrDefaultAsync(
-				predicate: c => c.CategoryId == id,
-				include: q => q.Include(c => c.NewsArticles),
-				asNoTracking: false
-			);
-
-			if (existing == null)
+			// Ensure category exists
+			var exists = await _categoryRepository.AnyAsync(c => c.CategoryId == id);
+			if (!exists)
 				return new BaseResponse<string>("Category not found", StatusCodes.NotFound, null);
 
-			var hasNews = existing.NewsArticles != null && existing.NewsArticles.Count != 0;
-
-			if (!hasNews)
+			// Check for related news articles without loading the collections
+			var hasNews = await _categoryRepository.AnyAsync(c => c.CategoryId == id && c.NewsArticles.Any());
+			if (hasNews)
 			{
-				// Safe to hard delete
-				_categoryRepository.Remove(existing);
+				// Do not allow deletion or deactivation when category has related news
+				return new BaseResponse<string>("Cannot delete or deactivate category because it has related news articles.", StatusCodes.BadRequest, null);
+			}
+
+			// Check for child categories
+			var hasChildren = await _categoryRepository.AnyAsync(c => c.ParentCategoryId == id);
+
+			// Load the entity once for delete/update operations
+			var existing = await _categoryRepository.GetByIdAsync(id);
+
+			if (!hasChildren)
+			{
+				// Safe to hard delete when no news and no children
+				_categoryRepository.Remove(existing!);
 				var saved = await _categoryRepository.SaveChangesAsync();
 				if (!saved)
 					return new BaseResponse<string>("Failed to delete category", StatusCodes.InternalServerError, null);
@@ -78,8 +86,8 @@ namespace Application.Services
 			}
 			else
 			{
-				// Cannot hard delete if it has related news => mark as inactive
-				if (existing.IsActive)
+				// Has children but no news -> soft-delete (deactivate) is allowed
+				if (existing!.IsActive)
 				{
 					existing.IsActive = false;
 					_categoryRepository.Update(existing);
@@ -88,7 +96,7 @@ namespace Application.Services
 						return new BaseResponse<string>("Failed to deactivate category", StatusCodes.InternalServerError, null);
 				}
 
-				return new BaseResponse<string>("Category deactivated because it has related data", StatusCodes.Ok, null);
+				return new BaseResponse<string>("Category deactivated because it has child categories", StatusCodes.Ok, null);
 			}
 		}
 
