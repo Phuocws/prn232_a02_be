@@ -17,14 +17,16 @@ namespace Application.Services
 	{
 		private readonly IGenericRepository<NewsArticle> _newsArticleRepository;
 		private readonly IGenericRepository<Tag> _tagRepository;
+		private readonly IGenericRepository<Category> _categoryRepository;
 		private readonly IMapper _mapper;
 		private readonly IValidator<CreateRequest> _createRequestValidator;
 		private readonly IValidator<UpdateRequest> _updateRequestValidator;
 
-		public NewsArticleService(IGenericRepository<NewsArticle> newsArticleRepository, IGenericRepository<Tag> tagRepository, IMapper mapper, IValidator<CreateRequest> createRequestValidator, IValidator<UpdateRequest> updateRequestValidator)
+		public NewsArticleService(IGenericRepository<NewsArticle> newsArticleRepository, IGenericRepository<Tag> tagRepository, IGenericRepository<Category> categoryRepository, IMapper mapper, IValidator<CreateRequest> createRequestValidator, IValidator<UpdateRequest> updateRequestValidator)
 		{
 			_newsArticleRepository = newsArticleRepository;
 			_tagRepository = tagRepository;
+			_categoryRepository = categoryRepository;
 			_mapper = mapper;
 			_createRequestValidator = createRequestValidator;
 			_updateRequestValidator = updateRequestValidator;
@@ -70,12 +72,15 @@ namespace Application.Services
 			if (existing == null)
 				return new BaseResponse<string>("News article not found", StatusCodes.NotFound, null);
 
-			_newsArticleRepository.Remove(existing);
+			// Soft-delete: mark as inactive instead of removing
+			existing.NewsStatus = (byte)NewsStatuses.Inactive;
+
+			_newsArticleRepository.Update(existing);
 			var saved = await _newsArticleRepository.SaveChangesAsync();
 			if (!saved)
-				return new BaseResponse<string>("Failed to delete news article", StatusCodes.InternalServerError, null);
+				return new BaseResponse<string>("Failed to deactivate news article", StatusCodes.InternalServerError, null);
 
-			return new BaseResponse<string>("News article deleted", StatusCodes.Ok, null);
+			return new BaseResponse<string>("News article deactivated", StatusCodes.Ok, null);
 		}
 
 		public async Task<BaseResponse<GetDetailResponse>> GetByIdAsync(int id)
@@ -83,6 +88,7 @@ namespace Application.Services
 			var entity = await _newsArticleRepository.GetByConditionAsync(
 										na => na.NewsArticleId == id,
 										na => na.Include(na => na.Category)
+												.ThenInclude(c => c.InverseParentCategory)
 												.Include(na => na.CreatedBy)
 												.Include(na => na.UpdatedBy)
 												.Include(na => na.Tags)
@@ -101,9 +107,49 @@ namespace Application.Services
 
 			var filter = BuildFilterFromAdminRequest(request);
 
+			// If caller does not want to include inactive categories, compute allowed category ids where the whole ancestor chain is active
+			if (!request.IncludeInactiveCategories)
+			{
+				var categories = (await _categoryRepository.GetAllAsync(asNoTracking: true)).ToList();
+				var dict = categories.ToDictionary(c => c.CategoryId);
+
+				var memo = new Dictionary<int, bool>();
+				bool IsChainActive(int catId)
+				{
+					if (memo.TryGetValue(catId, out var val)) return val;
+					if (!dict.TryGetValue(catId, out var cat))
+					{
+						memo[catId] = false; return false;
+					}
+					if (!cat.IsActive)
+					{
+						memo[catId] = false; return false;
+					}
+					if (!cat.ParentCategoryId.HasValue)
+					{
+						memo[catId] = true; return true;
+					}
+					var parentActive = IsChainActive(cat.ParentCategoryId.Value);
+					memo[catId] = parentActive;
+					return parentActive;
+				}
+
+				var allowedIds = categories.Where(c => IsChainActive(c.CategoryId)).Select(c => c.CategoryId).ToList();
+
+				if (allowedIds.Count == 0)
+				{
+					// No allowed categories -> return empty paged result
+					var emptyPaged = new PagedResult<GetSummaryResponse>(Enumerable.Empty<GetSummaryResponse>(), request.PageNumber, request.PageSize, 0);
+					return new BaseResponse<PagedResult<GetSummaryResponse>>("News articles retrieved", StatusCodes.Ok, emptyPaged);
+				}
+
+				Expression<Func<NewsArticle, bool>> categoryFilter = n => allowedIds.Contains(n.CategoryId);
+				filter = filter is null ? categoryFilter : ExpressionExtensions.AndAlso(filter, categoryFilter);
+			}
+
 			var (items, totalCount) = await _newsArticleRepository.GetPagedAsync(
 				filter: filter,
-				include: q => q.Include(n => n.Category).Include(n => n.CreatedBy),
+				include: q => q.Include(n => n.Category).ThenInclude(c => c.ParentCategory).Include(n => n.CreatedBy),
 				orderBy: q => q.ApplySorting(request.SortBy, request.IsDescending),
 				pageNumber: request.PageNumber,
 				pageSize: request.PageSize,
@@ -130,9 +176,48 @@ namespace Application.Services
 			var additional = BuildFilterFromOwnerRequest(request);
 			Expression<Func<NewsArticle, bool>>? filter = additional is null ? ownerFilter : ExpressionExtensions.AndAlso(ownerFilter, additional);
 
+			// If caller does not want to include inactive categories, compute allowed category ids where the whole ancestor chain is active
+			if (!request.IncludeInactiveCategories)
+			{
+				var categories = (await _categoryRepository.GetAllAsync(asNoTracking: true)).ToList();
+				var dict = categories.ToDictionary(c => c.CategoryId);
+
+				var memo = new Dictionary<int, bool>();
+				bool IsChainActive(int catId)
+				{
+					if (memo.TryGetValue(catId, out var val)) return val;
+					if (!dict.TryGetValue(catId, out var cat))
+					{
+						memo[catId] = false; return false;
+					}
+					if (!cat.IsActive)
+					{
+						memo[catId] = false; return false;
+					}
+					if (!cat.ParentCategoryId.HasValue)
+					{
+						memo[catId] = true; return true;
+					}
+					var parentActive = IsChainActive(cat.ParentCategoryId.Value);
+					memo[catId] = parentActive;
+					return parentActive;
+				}
+
+				var allowedIds = categories.Where(c => IsChainActive(c.CategoryId)).Select(c => c.CategoryId).ToList();
+
+				if (!allowedIds.Any())
+				{
+					var emptyPaged = new PagedResult<GetSummaryResponse>(Enumerable.Empty<GetSummaryResponse>(), request.PageNumber, request.PageSize, 0);
+					return new BaseResponse<PagedResult<GetSummaryResponse>>("News articles retrieved", StatusCodes.Ok, emptyPaged);
+				}
+
+				Expression<Func<NewsArticle, bool>> categoryFilter = n => allowedIds.Contains(n.CategoryId);
+				filter = filter is null ? categoryFilter : ExpressionExtensions.AndAlso(filter, categoryFilter);
+			}
+
 			var (items, totalCount) = await _newsArticleRepository.GetPagedAsync(
 				filter: filter,
-				include: q => q.Include(n => n.Category).Include(n => n.CreatedBy),
+				include: q => q.Include(n => n.Category).ThenInclude(c => c.ParentCategory).Include(n => n.CreatedBy),
 				orderBy: q => q.ApplySorting(request.SortBy, request.IsDescending),
 				pageNumber: request.PageNumber,
 				pageSize: request.PageSize,

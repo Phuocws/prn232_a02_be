@@ -12,6 +12,7 @@ namespace Application.DTOs.Requests.NewsArticles
 		public NewsStatuses? NewsStatus { get; set; }
 		public DateTime? CreatedDateFrom { get; set; }
 		public DateTime? CreatedDateTo { get; set; }
+		public bool IncludeInactiveCategories { get; set; }
 		public IEnumerable<int>? TagIds { get; set; }
 	}
 }

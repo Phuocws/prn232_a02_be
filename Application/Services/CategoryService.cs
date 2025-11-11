@@ -64,15 +64,32 @@ namespace Application.Services
 			if (existing == null)
 				return new BaseResponse<string>("Category not found", StatusCodes.NotFound, null);
 
-			if (existing.NewsArticles != null && existing.NewsArticles.Count != 0)
-				return new BaseResponse<string>("Cannot delete category because it has news articles.", StatusCodes.BadRequest, null);
+			var hasNews = existing.NewsArticles != null && existing.NewsArticles.Count != 0;
 
-			_categoryRepository.Remove(existing);
-			var saved = await _categoryRepository.SaveChangesAsync();
-			if (!saved)
-				return new BaseResponse<string>("Failed to delete category", StatusCodes.InternalServerError, null);
+			if (!hasNews)
+			{
+				// Safe to hard delete
+				_categoryRepository.Remove(existing);
+				var saved = await _categoryRepository.SaveChangesAsync();
+				if (!saved)
+					return new BaseResponse<string>("Failed to delete category", StatusCodes.InternalServerError, null);
 
-			return new BaseResponse<string>("Category deleted", StatusCodes.Ok, null);
+				return new BaseResponse<string>("Category deleted", StatusCodes.Ok, null);
+			}
+			else
+			{
+				// Cannot hard delete if it has related news => mark as inactive
+				if (existing.IsActive)
+				{
+					existing.IsActive = false;
+					_categoryRepository.Update(existing);
+					var saved = await _categoryRepository.SaveChangesAsync();
+					if (!saved)
+						return new BaseResponse<string>("Failed to deactivate category", StatusCodes.InternalServerError, null);
+				}
+
+				return new BaseResponse<string>("Category deactivated because it has related data", StatusCodes.Ok, null);
+			}
 		}
 
 		public async Task<BaseResponse<GetResponse>> GetByIdAsync(int id)
@@ -90,23 +107,38 @@ namespace Application.Services
 			if (request is null)
 				return new BaseResponse<List<GetDropdownResponse>>("Request is null", StatusCodes.BadRequest, null);
 
-			// Fetch categories from repository with optional active filter to reduce data transfer
-			Expression<Func<Category, bool>>? repoFilter = null;
-			if (!request.IncludeInactive)
+			// Always fetch all categories so we can evaluate ancestor chains
+			var allCategories = (await _categoryRepository.GetAllAsync(asNoTracking: true)).ToList();
+
+			// Build lookup for ancestor checks
+			var dict = allCategories.ToDictionary(c => c.CategoryId);
+			var memo = new Dictionary<int, bool>();
+			bool IsChainActive(int catId)
 			{
-				repoFilter = c => c.IsActive;
+				if (memo.TryGetValue(catId, out var cached)) return cached;
+				if (!dict.TryGetValue(catId, out var cat)) { memo[catId] = false; return false; }
+				if (!cat.IsActive) { memo[catId] = false; return false; }
+				if (!cat.ParentCategoryId.HasValue) { memo[catId] = true; return true; }
+				var parentActive = IsChainActive(cat.ParentCategoryId.Value);
+				memo[catId] = parentActive;
+				return parentActive;
 			}
 
-			var allCategories = (await _categoryRepository.GetAllAsync(filter: repoFilter, asNoTracking: true)).ToList();
+			// If caller doesn't want inactive categories, filter out any category whose ancestor chain is not fully active
+			IEnumerable<Category> filtered = allCategories;
+			if (!request.IncludeInactive)
+			{
+				var allowed = allCategories.Where(c => IsChainActive(c.CategoryId)).Select(c => c.CategoryId).ToHashSet();
+				filtered = filtered.Where(c => allowed.Contains(c.CategoryId));
+			}
 
 			// Determine which categories act as parents (have children) within the fetched set
-			var parentIds = allCategories
+			var parentIds = filtered
 				.Where(c => c.ParentCategoryId.HasValue)
 				.Select(c => c.ParentCategoryId!.Value)
 				.ToHashSet();
 
 			// Apply requested parent-only filter (if requested, keep only categories that are parents)
-			IEnumerable<Category> filtered = allCategories;
 			if (request.IncludeParentCategoriesOnly)
 			{
 				filtered = filtered.Where(c => parentIds.Contains(c.CategoryId));
@@ -174,10 +206,36 @@ namespace Application.Services
 				if (filter == null) filter = parentFilter; else filter = ExpressionExtensions.AndAlso(filter, parentFilter);
 			}
 
+			// Handle IsActive filter with ancestor chain awareness
 			if (request.IsActive.HasValue)
 			{
-				Expression<Func<Category, bool>> activeFilter = c => c.IsActive == request.IsActive.Value;
-				if (filter == null) filter = activeFilter; else filter = ExpressionExtensions.AndAlso(filter, activeFilter);
+				// Load all categories to compute ancestor chains
+				var categories = (await _categoryRepository.GetAllAsync(asNoTracking: true)).ToList();
+				var dict = categories.ToDictionary(c => c.CategoryId);
+				var memo = new Dictionary<int, bool>();
+				bool IsChainActive(int catId)
+				{
+					if (memo.TryGetValue(catId, out var cached)) return cached;
+					if (!dict.TryGetValue(catId, out var cat)) { memo[catId] = false; return false; }
+					if (!cat.IsActive) { memo[catId] = false; return false; }
+					if (!cat.ParentCategoryId.HasValue) { memo[catId] = true; return true; }
+					var parentActive = IsChainActive(cat.ParentCategoryId.Value);
+					memo[catId] = parentActive;
+					return parentActive;
+				}
+
+				var allowedIds = categories.Where(c => IsChainActive(c.CategoryId)).Select(c => c.CategoryId).ToHashSet();
+
+				if (request.IsActive.Value)
+				{
+					Expression<Func<Category, bool>> activeChainFilter = c => allowedIds.Contains(c.CategoryId);
+					if (filter == null) filter = activeChainFilter; else filter = ExpressionExtensions.AndAlso(filter, activeChainFilter);
+				}
+				else
+				{
+					Expression<Func<Category, bool>> inactiveChainFilter = c => !allowedIds.Contains(c.CategoryId);
+					if (filter == null) filter = inactiveChainFilter; else filter = ExpressionExtensions.AndAlso(filter, inactiveChainFilter);
+				}
 			}
 
 			var (Items, TotalCount) = await _categoryRepository.GetPagedAsync(
