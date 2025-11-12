@@ -127,6 +127,16 @@ namespace Application.Services
 			if (!string.IsNullOrWhiteSpace(request.AccountEmail) && await _accountRepository.AnyAsync(u => u.AccountEmail == request.AccountEmail && u.AccountId != accountId))
 				return new BaseResponse<string>("Another account with the provided email already exists.", StatusCodes.BadRequest, null);
 
+			// Prevent changing role if the existing account is Admin
+			if (request.AccountRole.HasValue && existing.AccountRole == (int)AccountRoles.Admin)
+			{
+				// If requested role is the same (Admin) allow, otherwise block
+				if (request.AccountRole.Value != AccountRoles.Admin)
+				{
+					return new BaseResponse<string>("Cannot change role of an Admin account.", StatusCodes.BadRequest, null);
+				}
+			}
+
 			// Map non-null properties from request onto existing entity using IMapper
 			_mapper.Map(request, existing);
 
@@ -134,6 +144,12 @@ namespace Application.Services
 			if (!string.IsNullOrWhiteSpace(request.Password))
 			{
 				existing.AccountPassword = HashPassword(request.Password);
+			}
+
+			// If role provided and not blocked above, apply it
+			if (request.AccountRole.HasValue)
+			{
+				existing.AccountRole = (int)request.AccountRole.Value;
 			}
 
 			_accountRepository.Update(existing);

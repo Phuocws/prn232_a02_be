@@ -58,6 +58,18 @@ namespace API.Controllers
 		[HttpDelete("{id}")]
 		public async Task<ActionResult<BaseResponse<string>>> Delete(int id)
 		{
+			var idClaim = User.Claims.FirstOrDefault(c => c.Type == "id" || c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+			if (string.IsNullOrEmpty(idClaim) || !int.TryParse(idClaim, out var loggerId))
+			{
+				return StatusCode((int)Domain.Enums.StatusCodes.Unauthorized,
+					new BaseResponse<string>("Invalid token or user id missing", Domain.Enums.StatusCodes.Unauthorized, null));
+			}
+			if (loggerId == id)
+			{
+				return StatusCode((int)Domain.Enums.StatusCodes.BadRequest,
+					new BaseResponse<string>("You cannot delete your own account", Domain.Enums.StatusCodes.BadRequest, null));
+			}
+
 			var result = await _accountService.DeleteAsync(id);
 			return StatusCode((int)result.StatusCode, result);
 		}

@@ -300,7 +300,41 @@ namespace Application.Services
 				}
 			}
 
+			// If request tries to deactivate the category, ensure there are no active news articles referencing it
+			// (inactive news are allowed)
+			if (request is not null && typeof(UpdateRequest).GetProperty("IsActive") != null)
+			{
+				// Use reflection to avoid compile error if UpdateRequest doesn't declare IsActive in some branches of codebase
+				var prop = typeof(UpdateRequest).GetProperty("IsActive");
+				if (prop != null)
+				{
+					var value = prop.GetValue(request);
+					if (value is bool isActiveRequested && isActiveRequested == false)
+					{
+						// check for any active news articles
+						var hasActiveNews = await _categoryRepository.AnyAsync(c => c.CategoryId == id && c.NewsArticles.Any(n => n.NewsStatus != (byte)NewsStatuses.Inactive));
+						if (hasActiveNews)
+						{
+							return new BaseResponse<string>("Cannot deactivate category because it has active news articles.", StatusCodes.BadRequest, null);
+						}
+					}
+				}
+			}
+
+			// Map other fields
 			_mapper.Map(request, existing);
+
+			// Remove parent if not provided in request (explicitly clear ParentCategoryId)
+			if (!request.ParentCategoryId.HasValue)
+			{
+				existing.ParentCategoryId = null;
+			}
+			else
+			{
+				// parent provided and already validated above; ensure value is assigned
+				existing.ParentCategoryId = request.ParentCategoryId;
+			}
+
 			_categoryRepository.Update(existing);
 			var saved = await _categoryRepository.SaveChangesAsync();
 			if (!saved)

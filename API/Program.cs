@@ -11,10 +11,13 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddApplicationServices();
 builder.Services.AddJWTServices(builder.Configuration);
 
+// Force all routes to be lowercase
+builder.Services.AddRouting(options => options.LowercaseUrls = true);
+
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
 	options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-}); 
+});
 
 // Ensure minimal APIs / WriteAsJsonAsync use the same serializer settings (enums as strings)
 builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
